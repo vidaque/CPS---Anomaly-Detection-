@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+cps-env/
+venv/
+
+# Data files
+data/raw/*.csv
+data/processed/*
+data/labels/*
+
+# OS files
+.DS_Store
