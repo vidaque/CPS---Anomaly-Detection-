@@ -1,9 +1,18 @@
 import time
 import csv
+import os
 import random
-from datetime import datetime
+
+from cps.sensors.sensor_emulator import read_sensors
+from cps.can.can_sender import CANTransmitter
+
+CSV_PATH = "data/raw/vehicle_simulation.csv"
+SLEEP_TIME = 0.1
+
 
 class Vehicle:
+    """Vehicle physical dynamics (no sensor logic here)"""
+
     def __init__(self):
         self.speed = 0.0
         self.brake = False
@@ -17,33 +26,67 @@ class Vehicle:
 
         self.steering += random.uniform(-0.3, 0.3)
 
-    def read_sensors(self):
+    def get_state(self):
         return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "speed": round(self.speed + random.uniform(-0.5, 0.5), 2),
-            "brake": int(self.brake),
-            "steering": round(self.steering, 2)
+            "speed": self.speed,
+            "brake": self.brake,
+            "steering": self.steering
         }
 
-def run_simulation(steps=100):
+
+def ensure_csv():
+    os.makedirs("data/raw", exist_ok=True)
+    if not os.path.exists(CSV_PATH):
+        with open(CSV_PATH, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["timestamp", "speed", "brake", "steering"]
+            )
+            writer.writeheader()
+
+
+def run_simulation():
+    print("[CPS] Vehicle simulator started (sensor emulation + CAN)")
+
     vehicle = Vehicle()
+    can_tx = CANTransmitter()
 
-    with open("data/raw/vehicle_simulation.csv", "w", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["timestamp", "speed", "brake", "steering"]
-        )
-        writer.writeheader()
+    ensure_csv()
 
-        for step in range(steps):
-            if step % 30 == 0:
-                vehicle.brake = not vehicle.brake
+    try:
+        with open(CSV_PATH, "a", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["timestamp", "speed", "brake", "steering"]
+            )
 
-            vehicle.update_state()
-            data = vehicle.read_sensors()
-            writer.writerow(data)
+            step = 0
+            while True:
+                if step % 30 == 0:
+                    vehicle.brake = not vehicle.brake
 
-            time.sleep(0.1)
+                vehicle.update_state()
+
+                vehicle_state = vehicle.get_state()
+                data = read_sensors(vehicle_state)
+
+                writer.writerow(data)
+                f.flush()
+
+                can_tx.send(
+                    data["speed"],
+                    data["brake"],
+                    data["steering"]
+                )
+
+                time.sleep(SLEEP_TIME)
+                step += 1
+
+    except KeyboardInterrupt:
+        print("\n[CPS] Simulator stopped by user")
+
+    finally:
+        can_tx.close()
+        print("[CPS] CAN bus closed cleanly")
+
 
 if __name__ == "__main__":
     run_simulation()

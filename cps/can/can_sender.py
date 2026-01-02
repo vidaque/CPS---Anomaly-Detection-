@@ -5,7 +5,7 @@ from config.can_config import CAN_INTERFACE, CAN_CHANNEL, CAN_ID
 class CANTransmitter:
     """
     CPS CAN transmitter.
-    Works with virtual CAN (vcan0) and real CAN (can0).
+    Supports virtual CAN (vcan0) and real CAN (can0).
     """
 
     def __init__(self):
@@ -15,9 +15,6 @@ class CANTransmitter:
         )
 
     def send(self, speed, brake, steering):
-        """
-        Send CPS sensor data over CAN bus.
-        """
         data = [
             int(speed) & 0xFF,
             int(brake) & 0xFF,
@@ -31,3 +28,7 @@ class CANTransmitter:
         )
 
         self.bus.send(msg)
+
+    def close(self):
+        """Gracefully shut down CAN bus"""
+        self.bus.shutdown()
