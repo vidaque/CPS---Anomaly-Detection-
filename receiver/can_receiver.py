@@ -1,36 +1,52 @@
 import can
 import csv
-from datetime import datetime
+import time
+import os
+from config.can_config import CAN_INTERFACE, CAN_CHANNEL
 
-bus = can.interface.Bus(
-    channel='vcan0',
-    interface='socketcan'
-)
+OUTPUT_FILE = "data/live/can_stream.csv"
 
-print("[CAN RECEIVER] Listening on vcan0")
 
-try:
-    with open("data/raw/can_logs.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "speed", "brake", "steering"])
+def ensure_output():
+    os.makedirs("data/live", exist_ok=True)
+    if not os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "speed", "brake", "steering"])
 
-        for msg in bus:
-            speed = msg.data[0]
-            brake = msg.data[1]
-            steering = msg.data[2] - 128
 
-            writer.writerow([
-                datetime.utcnow().isoformat(),
-                speed,
-                brake,
-                steering
-            ])
+def main():
+    ensure_output()
 
-            print(f"[RECEIVED] Speed={speed} Brake={brake} Steering={steering}")
+    bus = can.interface.Bus(
+        channel=CAN_CHANNEL,
+        interface=CAN_INTERFACE
+    )
 
-except KeyboardInterrupt:
-    print("\n[CAN RECEIVER] Stopped by user")
+    print("[RECEIVER] Listening on CAN bus...")
 
-finally:
-    bus.shutdown()
-    print("[CAN RECEIVER] CAN interface closed")
+    try:
+        with open(OUTPUT_FILE, "a", newline="") as f:
+            writer = csv.writer(f)
+
+            for msg in bus:
+                timestamp = time.time()
+
+                # Decode CPS sensor data
+                speed = msg.data[0]
+                brake = msg.data[1]
+                steering = msg.data[2]
+
+                writer.writerow([timestamp, speed, brake, steering])
+                f.flush()
+
+    except KeyboardInterrupt:
+        print("\n[RECEIVER] Receiver stopped by user")
+
+    finally:
+        bus.shutdown()
+        print("[RECEIVER] CAN bus closed cleanly")
+
+
+if __name__ == "__main__":
+    main()
