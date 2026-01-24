@@ -1,4 +1,7 @@
 import streamlit as st
+import pandas as pd
+import time
+import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -10,6 +13,12 @@ st.set_page_config(
 # ---------- LOAD CSS ----------
 with open("styles.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+DATA_FILE = "../data/live/can_stream.csv"
+
+def load_live_data():
+    if not os.path.exists(DATA_FILE):
+        return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
+    return pd.read_csv(DATA_FILE)
 
 # ---------- HEADER ----------
 st.markdown("# 🚗 Cyber-Physical Security Monitoring Platform")
@@ -38,11 +47,36 @@ Description: CPS operating within expected parameters.
 
 # ---------- LIVE TELEMETRY PLACEHOLDER ----------
 st.markdown("## 📡 Live CPS Telemetry")
-st.markdown("""
-<div class="section">
-<p>Live sensor charts (speed, steering, brake) will appear here.</p>
-</div>
-""", unsafe_allow_html=True)
+
+telemetry_section = st.empty()
+
+while True:
+    df = load_live_data()
+
+    if not df.empty:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df = df.tail(100)  # last 100 points only
+
+        with telemetry_section.container():
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.markdown("### 🚗 Speed")
+                st.line_chart(df.set_index("timestamp")["speed"])
+
+            with col2:
+                st.markdown("### 🔄 Steering")
+                st.line_chart(df.set_index("timestamp")["steering"])
+
+            with col3:
+                st.markdown("### 🛑 Brake")
+                st.line_chart(df.set_index("timestamp")["brake"])
+
+    else:
+        telemetry_section.info("Waiting for CPS data...")
+
+    time.sleep(1)
+
 
 # ---------- ATTACK & SECURITY PLACEHOLDER ----------
 st.markdown("## 🧨 Security Events & Attacks")
