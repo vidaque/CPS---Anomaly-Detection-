@@ -1,0 +1,23 @@
+body {
+    background-color: #0e1117;
+    color: #ffffff;
+}
+
+.section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.section h2 {
+    margin-bottom: 10px;
+}
+
+.status {
+    font-weight: bold;
+}
+
+.normal { color: #00ff9c; }
+.attack { color: #ff4b4b; }
+.recovery { color: #ffcc00; }
