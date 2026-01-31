@@ -35,14 +35,17 @@ def get_system_health(df, timeout=10):
         "ml": "INACTIVE"
     }
 
-    if not df.empty:
-        last_time = pd.to_datetime(df["timestamp"].iloc[-1], unit="s")
-        now = datetime.now()
-        delta = (now - last_time).total_seconds()
+    if not os.path.exists(DATA_FILE):
+        return health
 
-        if delta <= timeout:
-            health["simulator"] = "ACTIVE"
-            health["receiver"] = "ACTIVE"
+    # Check file modification time (real activity check)
+    file_mtime = os.path.getmtime(DATA_FILE)
+    now_ts = time.time()
+    file_delta = now_ts - file_mtime
+
+    if file_delta <= timeout:
+        health["simulator"] = "ACTIVE"
+        health["receiver"] = "ACTIVE"
 
     return health
 
