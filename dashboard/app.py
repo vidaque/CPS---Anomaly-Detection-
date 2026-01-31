@@ -28,7 +28,7 @@ def load_live_data():
     return pd.read_csv(DATA_FILE)
 
 # ---------------- SYSTEM HEALTH ----------------
-def get_system_health(df, timeout=5):
+def get_system_health(df, timeout=10):
     health = {
         "simulator": "INACTIVE",
         "receiver": "INACTIVE",
@@ -36,8 +36,8 @@ def get_system_health(df, timeout=5):
     }
 
     if not df.empty:
-        last_time = pd.to_datetime(df["timestamp"].iloc[-1])
-        now = datetime.utcnow()
+        last_time = pd.to_datetime(df["timestamp"].iloc[-1], unit="s")
+        now = datetime.now()
         delta = (now - last_time).total_seconds()
 
         if delta <= timeout:
@@ -45,6 +45,7 @@ def get_system_health(df, timeout=5):
             health["receiver"] = "ACTIVE"
 
     return health
+
 
 # ---------------- CPS STATE ----------------
 def get_cps_state():
@@ -61,34 +62,51 @@ st.markdown("# 🚗 Cyber-Physical Security Monitoring Platform")
 st.markdown("### ML-Based Anomaly Detection for Smart Vehicle CPS")
 st.markdown("---")
 
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("⚙️ Platform Info")
+st.sidebar.markdown("**System Mode:** Simulation")
+st.sidebar.markdown("**CAN Interface:** vcan0")
+st.sidebar.markdown("**ML Model:** Isolation Forest")
+st.sidebar.markdown("**Attacks Implemented:**")
+st.sidebar.write("- Replay Attack")
+st.sidebar.write("- Timing / Delay Attack")
+st.sidebar.write("- Sensor Spoofing")
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Phase:** Phase-1 Monitoring")
+
 # ---------------- LOAD DATA ----------------
 df_live = load_live_data()
 health = get_system_health(df_live)
 cps_state = get_cps_state()
 
+# ---------------- KPI METRICS ----------------
+st.markdown("## 📊 System Overview")
+k1, k2, k3, k4 = st.columns(4)
+
+with k1:
+    st.metric("CPS State", cps_state)
+
+with k2:
+    st.metric("Simulator", health["simulator"])
+
+with k3:
+    st.metric("Receiver", health["receiver"])
+
+with k4:
+    st.metric("ML Engine", "ACTIVE")
+
 # ---------------- SYSTEM HEALTH PANEL ----------------
 st.markdown("## 🧩 System Health Overview")
-
 st.markdown(f"""
 <div class="section">
-<b>Simulator:</b>
-<span class="status {'normal' if health['simulator']=='ACTIVE' else 'attack'}">
-{health['simulator']}
-</span><br>
-
-<b>Receiver:</b>
-<span class="status {'normal' if health['receiver']=='ACTIVE' else 'attack'}">
-{health['receiver']}
-</span><br>
-
-<b>ML Engine:</b>
-<span class="status normal">Monitoring</span><br>
-
+<b>Simulator:</b> {health['simulator']}<br>
+<b>Receiver:</b> {health['receiver']}<br>
+<b>ML Engine:</b> ACTIVE<br>
 <b>CAN Interface:</b> vcan0
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- CPS STATE PANEL ----------------
+# ---------------- CPS STATE ----------------
 state_class = {
     "NORMAL": "normal",
     "ATTACK": "attack",
@@ -96,21 +114,31 @@ state_class = {
 }.get(cps_state, "normal")
 
 st.markdown("## 🚦 CPS Operational State")
-
 st.markdown(f"""
 <div class="section">
-Current State:
-<span class="status {state_class}">
-{cps_state}
-</span><br>
-Description: CPS operating under {cps_state.lower()} conditions.
+Current State: <span class="status {state_class}">{cps_state}</span><br>
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- LIVE TELEMETRY ----------------
-st.markdown("## 📡 Live CPS Telemetry")
-telemetry_container = st.empty()
+# ---------------- LIVE MONITORING ----------------
+st.markdown("## 📡 Live CPS Monitoring")
+left, right = st.columns([2, 1])
 
+with left:
+    st.markdown("### Vehicle Telemetry")
+    telemetry_container = st.empty()
+
+with right:
+    st.markdown("### ML Intelligence")
+    st.markdown("""
+    <div class="section">
+    <b>Anomaly Score:</b> Monitoring<br>
+    <b>Status:</b> Standby<br>
+    <b>Confidence:</b> N/A
+    </div>
+    """, unsafe_allow_html=True)
+
+# ---------------- TELEMETRY LOOP ----------------
 while True:
     df = load_live_data()
 
@@ -119,21 +147,14 @@ while True:
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             df = df.tail(100)
 
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                st.markdown("### 🚗 Speed")
+            c1, c2, c3 = st.columns(3)
+            with c1:
                 st.line_chart(df.set_index("timestamp")["speed"])
-
-            with col2:
-                st.markdown("### 🔄 Steering")
+            with c2:
                 st.line_chart(df.set_index("timestamp")["steering"])
-
-            with col3:
-                st.markdown("### 🛑 Brake")
+            with c3:
                 st.line_chart(df.set_index("timestamp")["brake"])
         else:
             st.info("Waiting for CPS data...")
 
     time.sleep(1)
-
