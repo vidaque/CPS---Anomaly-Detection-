@@ -2,62 +2,123 @@ import streamlit as st
 import pandas as pd
 import time
 import os
+from datetime import datetime
 
-# ---------- PAGE CONFIG ----------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
     page_title="CPS Security Monitoring Platform",
     page_icon="🚗",
     layout="wide"
 )
 
-# ---------- LOAD CSS ----------
-with open("styles.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-DATA_FILE = "../data/live/can_stream.csv"
+# ---------------- LOAD CSS ----------------
+CSS_FILE = "styles.css"
+if os.path.exists(CSS_FILE):
+    with open(CSS_FILE) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
+# ---------------- CONSTANTS ----------------
+DATA_FILE = "../data/live/can_stream.csv"
+STATE_FILE = "../ml/state.txt"
+
+# ---------------- DATA LOADER ----------------
 def load_live_data():
     if not os.path.exists(DATA_FILE):
         return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
     return pd.read_csv(DATA_FILE)
 
-# ---------- HEADER ----------
+# ---------------- SYSTEM HEALTH ----------------
+def get_system_health(df, timeout=5):
+    health = {
+        "simulator": "INACTIVE",
+        "receiver": "INACTIVE",
+        "ml": "INACTIVE"
+    }
+
+    if not df.empty:
+        last_time = pd.to_datetime(df["timestamp"].iloc[-1])
+        now = datetime.utcnow()
+        delta = (now - last_time).total_seconds()
+
+        if delta <= timeout:
+            health["simulator"] = "ACTIVE"
+            health["receiver"] = "ACTIVE"
+
+    return health
+
+# ---------------- CPS STATE ----------------
+def get_cps_state():
+    if not os.path.exists(STATE_FILE):
+        return "NORMAL"
+
+    with open(STATE_FILE) as f:
+        state = f.read().strip()
+
+    return state if state else "NORMAL"
+
+# ---------------- HEADER ----------------
 st.markdown("# 🚗 Cyber-Physical Security Monitoring Platform")
 st.markdown("### ML-Based Anomaly Detection for Smart Vehicle CPS")
 st.markdown("---")
 
-# ---------- GLOBAL SYSTEM STATUS ----------
+# ---------------- LOAD DATA ----------------
+df_live = load_live_data()
+health = get_system_health(df_live)
+cps_state = get_cps_state()
+
+# ---------------- SYSTEM HEALTH PANEL ----------------
 st.markdown("## 🧩 System Health Overview")
-st.markdown("""
+
+st.markdown(f"""
 <div class="section">
-<b>Simulator:</b> <span class="status normal">Running</span><br>
-<b>CAN Interface:</b> vcan0<br>
-<b>Receiver:</b> Active<br>
-<b>ML Engine:</b> Monitoring
+<b>Simulator:</b>
+<span class="status {'normal' if health['simulator']=='ACTIVE' else 'attack'}">
+{health['simulator']}
+</span><br>
+
+<b>Receiver:</b>
+<span class="status {'normal' if health['receiver']=='ACTIVE' else 'attack'}">
+{health['receiver']}
+</span><br>
+
+<b>ML Engine:</b>
+<span class="status normal">Monitoring</span><br>
+
+<b>CAN Interface:</b> vcan0
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- CPS STATE ----------
+# ---------------- CPS STATE PANEL ----------------
+state_class = {
+    "NORMAL": "normal",
+    "ATTACK": "attack",
+    "RECOVERY": "recovery"
+}.get(cps_state, "normal")
+
 st.markdown("## 🚦 CPS Operational State")
-st.markdown("""
+
+st.markdown(f"""
 <div class="section">
-Current State: <span class="status normal">NORMAL</span><br>
-Description: CPS operating within expected parameters.
+Current State:
+<span class="status {state_class}">
+{cps_state}
+</span><br>
+Description: CPS operating under {cps_state.lower()} conditions.
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- LIVE TELEMETRY PLACEHOLDER ----------
+# ---------------- LIVE TELEMETRY ----------------
 st.markdown("## 📡 Live CPS Telemetry")
-
-telemetry_section = st.empty()
+telemetry_container = st.empty()
 
 while True:
     df = load_live_data()
 
-    if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df = df.tail(100)  # last 100 points only
+    with telemetry_container.container():
+        if not df.empty:
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = df.tail(100)
 
-        with telemetry_section.container():
             col1, col2, col3 = st.columns(3)
 
             with col1:
@@ -71,29 +132,8 @@ while True:
             with col3:
                 st.markdown("### 🛑 Brake")
                 st.line_chart(df.set_index("timestamp")["brake"])
-
-    else:
-        telemetry_section.info("Waiting for CPS data...")
+        else:
+            st.info("Waiting for CPS data...")
 
     time.sleep(1)
 
-
-# ---------- ATTACK & SECURITY PLACEHOLDER ----------
-st.markdown("## 🧨 Security Events & Attacks")
-st.markdown("""
-<div class="section">
-<p>Attack detection events and timelines will appear here.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------- ANALYTICS PLACEHOLDER ----------
-st.markdown("## 📊 Analytics & Forensics")
-st.markdown("""
-<div class="section">
-<p>Offline statistical analysis and comparisons will appear here.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------- FOOTER ----------
-st.markdown("---")
-st.markdown("<center>CPS IDS Platform • Phase-1 Monitoring Layer</center>", unsafe_allow_html=True)
