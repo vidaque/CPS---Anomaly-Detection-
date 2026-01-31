@@ -1,90 +1,129 @@
 import time
+import os
 import pandas as pd
+import numpy as np
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
+from datetime import datetime
 
+# ---------------- PATHS ----------------
 DATA_FILE = "data/live/can_stream.csv"
 
-BASELINE_SAMPLES = 200
-WINDOW_SIZE = 25
-CHECK_INTERVAL = 2
+STATE_FILE = "ml/state.txt"
+SCORE_FILE = "ml/anomaly_score.txt"
+EVENT_LOG = "ml/events.log"
 
-ANOMALY_RATIO_THRESHOLD = 0.5   # 50% of window anomalous
-PERSISTENCE_THRESHOLD = 3       # consecutive windows
+# ---------------- PARAMETERS ----------------
+BASELINE_SAMPLES = 200          # number of samples to learn normal behavior
+CHECK_INTERVAL = 1              # seconds
+ANOMALY_THRESHOLD = -0.15       # isolation forest score threshold
+PERSISTENCE_LIMIT = 5           # how many consecutive anomalies = ATTACK
 
-print("[ML] CPS Anomaly Detection System Starting...")
+# ---------------- INIT FILES ----------------
+os.makedirs("ml", exist_ok=True)
 
-scaler = StandardScaler()
-model = IsolationForest(
-    n_estimators=150,
-    contamination=0.1,
-    random_state=42
-)
+with open(STATE_FILE, "w") as f:
+    f.write("NORMAL")
 
-model_trained = False
-anomaly_counter = 0
+open(EVENT_LOG, "a").close()
 
-
+# ---------------- HELPERS ----------------
 def load_data():
-    try:
-        return pd.read_csv(DATA_FILE)
-    except Exception:
-        return pd.DataFrame()
+    if not os.path.exists(DATA_FILE):
+        return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
+    return pd.read_csv(DATA_FILE)
 
+def extract_features(df):
+    return df[["speed", "brake", "steering"]].values
 
-try:
+def log_event(event, description):
+    with open(EVENT_LOG, "a") as f:
+        f.write(f"{time.time()},{event},{description}\n")
+
+def write_state(state):
+    with open(STATE_FILE, "w") as f:
+        f.write(state)
+
+def write_score(score):
+    with open(SCORE_FILE, "w") as f:
+        f.write(str(round(score, 4)))
+
+# ---------------- MAIN ----------------
+def main():
+    print("[ML] CPS Anomaly Detection Engine Starting...")
+
+    # -------- BASELINE LEARNING --------
+    baseline_data = []
+
+    print("[ML] Learning baseline behavior...")
+    while len(baseline_data) < BASELINE_SAMPLES:
+        df = load_data()
+        if len(df) > 0:
+            baseline_data.append(df.iloc[-1])
+            print(f"[ML] Baseline samples: {len(baseline_data)}/{BASELINE_SAMPLES}")
+        time.sleep(0.1)
+
+    baseline_df = pd.DataFrame(baseline_data)
+    X_train = extract_features(baseline_df)
+
+    model = IsolationForest(
+        n_estimators=100,
+        contamination=0.05,
+        random_state=42
+    )
+    model.fit(X_train)
+
+    print("[ML] Baseline learned successfully")
+    log_event("BASELINE", "Baseline behavior learned")
+
+    # -------- LIVE MONITORING --------
+    anomaly_counter = 0
+    current_state = "NORMAL"
+
+    print("[ML] Live anomaly detection ACTIVATED")
+
     while True:
         df = load_data()
-
-        # ---------- BASELINE LEARNING ----------
-        if not model_trained:
-            if len(df) < BASELINE_SAMPLES:
-                print(f"[ML] Learning baseline... ({len(df)}/{BASELINE_SAMPLES})")
-                time.sleep(1)
-                continue
-
-            baseline = df.iloc[:BASELINE_SAMPLES][
-                ["speed", "brake", "steering"]
-            ]
-
-            X_train = scaler.fit_transform(baseline)
-            model.fit(X_train)
-
-            model_trained = True
-            print("[ML] Baseline learned successfully")
-            print("[ML] Live anomaly detection ACTIVATED")
+        if len(df) == 0:
+            time.sleep(CHECK_INTERVAL)
             continue
 
-        # ---------- LIVE DETECTION ----------
-        if len(df) < BASELINE_SAMPLES + WINDOW_SIZE:
-            time.sleep(1)
-            continue
+        latest = df.iloc[-1:]
+        X = extract_features(latest)
 
-        window = df.tail(WINDOW_SIZE)[
-            ["speed", "brake", "steering"]
-        ]
+        score = model.decision_function(X)[0]
+        write_score(score)
 
-        X_test = scaler.transform(window)
-        preds = model.predict(X_test)
-
-        anomaly_ratio = (preds == -1).sum() / WINDOW_SIZE
-
-        if anomaly_ratio >= ANOMALY_RATIO_THRESHOLD:
+        # -------- ANOMALY LOGIC --------
+        if score < ANOMALY_THRESHOLD:
             anomaly_counter += 1
-            print(
-                f"[ML] Suspicious behavior "
-                f"(confidence={anomaly_ratio:.2f}, streak={anomaly_counter})"
-            )
         else:
-            anomaly_counter = 0
-            print("[ML] CPS behavior normal")
+            anomaly_counter = max(0, anomaly_counter - 1)
 
-        if anomaly_counter >= PERSISTENCE_THRESHOLD:
-            print("🚨 [ALERT] CONFIRMED CPS CAN ATTACK DETECTED 🚨")
-            anomaly_counter = 0  # prevent alert spam
+        # -------- STATE TRANSITIONS --------
+        if anomaly_counter >= PERSISTENCE_LIMIT and current_state != "ATTACK":
+            current_state = "ATTACK"
+            write_state("ATTACK")
+            log_event("ATTACK", "Persistent anomaly detected")
+            print("⚠️  [ALERT] CPS ATTACK DETECTED")
+
+        elif anomaly_counter == 0 and current_state == "ATTACK":
+            current_state = "RECOVERY"
+            write_state("RECOVERY")
+            log_event("RECOVERY", "System stabilizing after attack")
+            print("[ML] Entering recovery state")
+
+        elif current_state == "RECOVERY" and anomaly_counter == 0:
+            current_state = "NORMAL"
+            write_state("NORMAL")
+            log_event("NORMAL", "System returned to normal")
+            print("[ML] CPS back to NORMAL")
 
         time.sleep(CHECK_INTERVAL)
 
-except KeyboardInterrupt:
-    print("\n[ML] Anomaly detection stopped by user. Exiting cleanly.")
-
+# ---------------- SAFE SHUTDOWN ----------------
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[ML] Detection stopped by user")
+        write_state("NORMAL")
