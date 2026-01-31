@@ -147,7 +147,8 @@ while True:
 
     with telemetry_container.container():
         if not df.empty:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+
             df = df.tail(100)
 
             c1, c2, c3 = st.columns(3)
