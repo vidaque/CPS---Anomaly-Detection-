@@ -1,17 +1,13 @@
-# Python
+# Python cache
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Virtual environment
-cps-env/
-venv/
+# Runtime ML outputs
+ml/*.txt
+ml/*.log
 
-# Data files
-data/raw/*.csv
-data/processed/*
-data/labels/*
+# Live data
+data/
 
-# OS files
-.DS_Store
+# CAN logs
+candump-*.log
