@@ -13,10 +13,10 @@ EVENT_LOG = "ml/events.log"
 SEVERITY_FILE = "ml/severity.txt"
 
 # ---------------- PARAMETERS ----------------
-BASELINE_SAMPLES = 200
+BASELINE_SAMPLES = 50
 CHECK_INTERVAL = 1
-ANOMALY_THRESHOLD = -0.15
-PERSISTENCE_LIMIT = 5
+ANOMALY_THRESHOLD = -0.10
+PERSISTENCE_LIMIT = 4
 
 # ---------------- INIT ----------------
 os.makedirs("ml", exist_ok=True)
@@ -33,7 +33,25 @@ open(EVENT_LOG, "a").close()
 def load_data():
     if not os.path.exists(DATA_FILE):
         return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
-    return pd.read_csv(DATA_FILE)
+
+    try:
+        df = pd.read_csv(
+            DATA_FILE,
+            on_bad_lines="skip"   # <-- KEY FIX
+        )
+
+        # Force correct columns only
+        df = df[["timestamp", "speed", "brake", "steering"]]
+
+        if df.empty:
+            return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
+
+        return df
+
+    except Exception as e:
+        print("[ML WARNING] Data read issue:", e)
+        return pd.DataFrame(columns=["timestamp", "speed", "brake", "steering"])
+
 
 def extract_features(df):
     return df[["speed", "brake", "steering"]].values
@@ -70,8 +88,10 @@ def main():
     while len(baseline) < BASELINE_SAMPLES:
         df = load_data()
         if len(df) > 0:
-            baseline.append(df.iloc[-1])
-            print(f"[ML] Baseline samples: {len(baseline)}/{BASELINE_SAMPLES}")
+          baseline.append(df.iloc[-1])
+    if len(baseline) > 50:
+        baseline = baseline[-50:]
+        print(f"[ML] Baseline samples: {len(baseline)}/{BASELINE_SAMPLES}")
         time.sleep(0.1)
 
     baseline_df = pd.DataFrame(baseline)
@@ -86,7 +106,8 @@ def main():
 
     log_event("BASELINE", "Baseline learned")
     print("[ML] Baseline learned successfully")
-
+    print("[ML] Warming up before detection...")
+    time.sleep(5)
     # -------- LIVE MONITORING --------
     anomaly_counter = 0
     current_state = "NORMAL"
@@ -95,8 +116,8 @@ def main():
 
     while True:
         df = load_data()
-        if len(df) == 0:
-            time.sleep(CHECK_INTERVAL)
+        if df.empty:
+            time.sleep(1)
             continue
 
         latest = df.iloc[-1:]
