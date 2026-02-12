@@ -1,13 +1,24 @@
-# Python cache
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.log
 
-# Runtime ML outputs
-ml/*.txt
-ml/*.log
+# Virtual Environment
+cps-env/
+venv/
 
-# Live data
+# Runtime ML files
+ml/state.txt
+ml/severity.txt
+ml/anomaly_score.txt
+ml/events.log
+ml/heartbeat.txt
+
+# Live & Raw Data
 data/
 
-# CAN logs
-candump-*.log
+# OS
+.DS_Store
+Thumbs.db
